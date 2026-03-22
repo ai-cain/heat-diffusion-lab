@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from 'react';
 import ControlsPanel from './components/ControlsPanel';
 import {
   DEFAULT_AMBIENT_TEMPERATURE,
@@ -108,6 +108,7 @@ function App() {
   const recordingUrlRef = useRef<string | null>(null);
   const lastConfigKeyRef = useRef('');
   const isPlayingRef = useRef(isPlaying);
+  const pendingPlayTargetRef = useRef<boolean | null>(null);
 
   const isRecordingSupported =
     typeof MediaRecorder !== 'undefined' &&
@@ -147,9 +148,16 @@ function App() {
     wsRef.current.send(JSON.stringify(payload));
   });
 
-  useEffect(() => {
-    isPlayingRef.current = isPlaying;
-  }, [isPlaying]);
+  const requestPlayingChange = useEffectEvent((nextPlaying: boolean) => {
+    pendingPlayTargetRef.current = nextPlaying;
+    isPlayingRef.current = nextPlaying;
+    setIsPlaying(nextPlaying);
+
+    sendSocketMessage({
+      type: 'set_playing',
+      data: { playing: nextPlaying },
+    });
+  });
 
   useEffect(() => {
     const socket = new WebSocket(backendWebSocketUrl);
@@ -157,6 +165,7 @@ function App() {
 
     socket.onopen = () => {
       lastConfigKeyRef.current = '';
+      pendingPlayTargetRef.current = null;
       setIsSocketReady(true);
       setError('');
     };
@@ -166,14 +175,33 @@ function App() {
         const message = JSON.parse(event.data);
 
         if (message.type === 'error' || message.error) {
+          pendingPlayTargetRef.current = null;
           setError(message.message ?? message.error ?? 'Engine error.');
           return;
         }
 
         if (message.type === 'state') {
           const nextSnapshot = message.data as HeatSnapshot;
-          setSnapshot(nextSnapshot);
-          setIsPlaying(nextSnapshot.playing);
+          startTransition(() => {
+            setSnapshot(nextSnapshot);
+          });
+
+          const pendingPlayTarget = pendingPlayTargetRef.current;
+
+          if (pendingPlayTarget === null) {
+            if (isPlayingRef.current !== nextSnapshot.playing) {
+              isPlayingRef.current = nextSnapshot.playing;
+              setIsPlaying(nextSnapshot.playing);
+            }
+          } else if (nextSnapshot.playing === pendingPlayTarget) {
+            pendingPlayTargetRef.current = null;
+
+            if (isPlayingRef.current !== nextSnapshot.playing) {
+              isPlayingRef.current = nextSnapshot.playing;
+              setIsPlaying(nextSnapshot.playing);
+            }
+          }
+
           setError('');
         }
       } catch {
@@ -183,11 +211,16 @@ function App() {
 
     socket.onclose = () => {
       lastConfigKeyRef.current = '';
+      pendingPlayTargetRef.current = null;
+      isPlayingRef.current = false;
+      setIsPlaying(false);
       setIsSocketReady(false);
     };
 
     return () => {
       lastConfigKeyRef.current = '';
+      pendingPlayTargetRef.current = null;
+      isPlayingRef.current = false;
       setIsSocketReady(false);
       socket.close();
     };
@@ -269,17 +302,6 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (!isSocketReady) {
-      return;
-    }
-
-    sendSocketMessage({
-      type: 'set_playing',
-      data: { playing: isPlaying },
-    });
-  }, [isPlaying, isSocketReady, sendSocketMessage]);
-
-  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) {
       return;
@@ -304,6 +326,8 @@ function App() {
   };
 
   const handleReset = () => {
+    pendingPlayTargetRef.current = false;
+    isPlayingRef.current = false;
     setIsPlaying(false);
     sendSocketMessage({ type: 'reset' });
     sendSocketMessage({ type: 'set_playing', data: { playing: false } });
@@ -385,6 +409,7 @@ function App() {
         ? 'Streaming state'
         : 'Ready to step'
       : 'Awaiting engine state';
+  const canControlPlayback = isSocketReady && snapshot !== null;
 
   const metricCards = [
     {
@@ -482,6 +507,7 @@ function App() {
 
         <ControlsPanel
           isPlaying={isPlaying}
+          canControlPlayback={canControlPlayback}
           isRecording={isRecording}
           isRecordingSupported={isRecordingSupported}
           isSocketReady={isSocketReady}
@@ -495,7 +521,7 @@ function App() {
           initialPattern={initialPattern}
           error={error}
           recordingError={recordingError}
-          onTogglePlay={() => setIsPlaying((value) => !value)}
+          onTogglePlay={() => requestPlayingChange(!isPlayingRef.current)}
           onToggleRecording={handleToggleRecording}
           onReset={handleReset}
           onGridWidthChange={setGridWidth}

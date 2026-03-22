@@ -4,6 +4,7 @@ import { formatBoundaryMode, formatInitialPattern } from '../lib/heatLabMath';
 
 interface ControlsPanelProps {
   isPlaying: boolean;
+  canControlPlayback: boolean;
   isRecording: boolean;
   isRecordingSupported: boolean;
   isSocketReady: boolean;
@@ -128,6 +129,7 @@ const PanelSection = ({ eyebrow, title, description, children }: PanelSectionPro
 
 function ControlsPanel({
   isPlaying,
+  canControlPlayback,
   isRecording,
   isRecordingSupported,
   isSocketReady,
@@ -167,10 +169,20 @@ function ControlsPanel({
       </div>
 
       <div className="panel-actions">
-        <button type="button" onClick={onTogglePlay} className="btn-primary">
+        <button
+          type="button"
+          onClick={onTogglePlay}
+          className="btn-primary"
+          disabled={!canControlPlayback}
+        >
           {isPlaying ? 'Pause' : 'Play'}
         </button>
-        <button type="button" onClick={onReset} className="btn-secondary">
+        <button
+          type="button"
+          onClick={onReset}
+          className="btn-secondary"
+          disabled={!canControlPlayback}
+        >
           Reset
         </button>
         <button
