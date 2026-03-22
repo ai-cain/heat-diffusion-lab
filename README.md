@@ -4,6 +4,8 @@ Interactive 2D heat-diffusion simulator with a native C++ engine, a thin Node.js
 
 The C++ engine owns the numerical state. The backend only forwards commands and snapshots. The frontend focuses on controls and heatmap rendering.
 
+![Heat Diffusion Lab demo](docs/media/demo.gif)
+
 ## Features
 
 - 2D temperature grid simulation

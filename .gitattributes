@@ -1,5 +1,0 @@
-frontend_web/** linguist-vendored=true
-backend_node/** linguist-vendored=true
-docs/** linguist-documentation=true
-*.md linguist-documentation=true
-mkdocs.yml linguist-documentation=true
