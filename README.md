@@ -1,72 +1,51 @@
 # Heat Diffusion Lab
 
-Interactive sandbox template for studying heat diffusion with the same architecture used in `normal-modes-of-coupled-pendulums`.
+Interactive 2D heat-diffusion simulator with a native C++ engine, a thin Node.js WebSocket bridge, and a lightweight React frontend.
 
-This folder is intended to become its own repository root later.
+The C++ engine owns the numerical state. The backend only forwards commands and snapshots. The frontend focuses on controls and heatmap rendering.
 
-## What This Is
+## Features
 
-This project is a full structural copy of the pendulum lab, redirected toward a new theme:
-
-- `frontend_web/` for controls and rendering
-- `backend_node/` as the WebSocket bridge
-- `engine_cpp/` as the native simulation engine
-- `docs/` for documentation
-
-The intended end state is a diffusion-focused app where the C++ engine owns the physical state and the frontend focuses on visualization.
-
-## Current Status
-
-This scaffold already includes:
-
-- the same folder layout
-- the same build setup
-- the same frontend/backend/native split
-- the same docs site structure
-
-It still contains copied implementation details from the pendulum project in several source files.
-That is intentional for now: this repo is a starting point so you can rewrite the domain logic yourself around heat diffusion.
-
-## Target Idea
-
-`Heat Diffusion Lab` can become an interactive environment for:
-
-- 1D heat flow in a rod
-- 2D heat diffusion on a plate
+- 2D temperature grid simulation
 - fixed and insulated boundary conditions
-- adjustable thermal diffusivity
-- initial temperature profiles
-- live heatmaps and time evolution
+- configurable grid resolution
+- adjustable thermal diffusivity and timestep
+- multiple initial heat presets
+- live C++ state streaming to the browser
+- heatmap recording from the canvas
 
-## Recommended Responsibilities
+## Architecture
 
-### Frontend
+```text
+frontend_web/  -> React + Vite UI and heatmap renderer
+backend_node/  -> WebSocket bridge and process manager
+engine_cpp/    -> native diffusion engine
+docs/          -> MkDocs project documentation
+```
 
-- sliders and controls
-- playback
-- canvas or grid rendering
-- charts and overlays
+Runtime flow:
 
-### Backend
+```text
+browser --WebSocket JSON--> Node backend --stdin/stdout--> C++ engine
+browser <--WebSocket JSON-- Node backend <--stdout-------- C++ engine
+```
 
-- WebSocket transport
-- validation and normalization
-- native process lifecycle
+## Simulation Model
 
-### C++ Engine
+The engine advances a 2D temperature field using a finite-difference discretization of the heat equation:
 
-- authoritative simulation state
-- numerical time stepping
-- grid temperature updates
-- snapshot emission back to the UI
+```math
+\frac{\partial u}{\partial t} = \alpha \nabla^2 u
+```
 
-## Suggested Rewrite Steps
+Current engine options:
 
-1. Replace pendulum-specific math and state with a temperature field.
-2. Redefine the engine protocol around diffusion parameters.
-3. Change the frontend controls from masses/angles/lengths to grid size, diffusivity, timestep, and boundary conditions.
-4. Replace the pendulum canvas renderer with a heatmap renderer.
-5. Update the docs derivation to the heat equation and numerical scheme.
+- `boundaryMode`: `fixed` or `insulated`
+- `initialPattern`: `center_hotspot`, `left_wall`, `checkerboard`, `ring`
+- `diffusivity`
+- `timeStep`
+- `ambientTemperature`
+- `hotspotTemperature`
 
 ## Folder Layout
 
@@ -82,14 +61,18 @@ heat-diffusion-lab/
   requirements-docs.txt
 ```
 
-## Running The Copied Scaffold
+## Run Locally
 
-If you want to verify the copied scaffold before rewriting it:
+### 1. Build the native engine
 
 ```powershell
 cmake -S engine_cpp -B engine_cpp/build
 cmake --build engine_cpp/build --config Release
 ```
+
+This produces `engine_cpp/build/Release/heat_diffusion_cli.exe` on Windows.
+
+### 2. Start the backend
 
 ```powershell
 cd backend_node
@@ -97,13 +80,56 @@ pnpm install
 pnpm start
 ```
 
+The backend listens on port `3002` by default.
+
+### 3. Start the frontend
+
 ```powershell
 cd frontend_web
 pnpm install
 pnpm dev
 ```
 
+By default, the frontend connects to `ws://localhost:3002`.
+
+## Browser Message API
+
+### Frontend to backend
+
+```json
+{
+  "type": "configure",
+  "data": {
+    "gridWidth": 48,
+    "gridHeight": 32,
+    "diffusivity": 0.18,
+    "timeStep": 0.12,
+    "boundaryMode": "fixed",
+    "initialPattern": "center_hotspot",
+    "ambientTemperature": 18,
+    "hotspotTemperature": 90,
+    "playing": false
+  }
+}
+```
+
+Other message types:
+
+- `set_playing`
+- `reset`
+- `request_state`
+
+### Backend to frontend
+
+The engine returns a `state` payload with:
+
+- current simulation time
+- current resolution and config
+- min/avg/max temperature
+- flattened temperature array
+
 ## Notes
 
-- This repo is intentionally a template clone, not a finished diffusion solver yet.
-- You can move this folder into its own Git repository without carrying the original `.git` history.
+- The frontend does not solve the PDE itself.
+- The backend keeps the engine process alive and forwards snapshots.
+- The engine also supports direct CLI output for one-shot inspection.

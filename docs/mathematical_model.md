@@ -1,21 +1,10 @@
 # Mathematical Model
 
-This page is intentionally a placeholder for the future heat-diffusion model.
+The simulator models heat diffusion on a 2D rectangular plate.
 
-## Planned Core Equation
+## Governing Equation
 
-For a temperature field `u(x, t)` in one spatial dimension, the standard heat equation is
-
-```math
-\frac{\partial u}{\partial t} = \alpha \frac{\partial^2 u}{\partial x^2}
-```
-
-where:
-
-- `u(x, t)` is temperature
-- `\alpha` is thermal diffusivity
-
-For a 2D plate, the model becomes
+For a temperature field `u(x, y, t)`, the heat equation is
 
 ```math
 \frac{\partial u}{\partial t} =
@@ -26,16 +15,48 @@ For a 2D plate, the model becomes
 \right)
 ```
 
-## Planned Numerical Direction
+where:
 
-A straightforward first implementation would be:
+- `u(x, y, t)` is temperature
+- `\alpha` is thermal diffusivity
 
-1. discretize the spatial domain into a grid
-2. approximate second derivatives with finite differences
-3. advance time using an explicit scheme or a more stable alternative
-4. stream the temperature grid from the C++ engine to the frontend
+## Discrete Update
 
-## Notes
+On a uniform grid, the engine uses a standard five-point Laplacian and advances the field with an explicit update:
 
-This repository was copied from the pendulum project as a structural scaffold.
-The actual derivation and numerical notes for `Heat Diffusion Lab` still need to be written by replacing the copied mechanics-specific logic.
+```math
+u_{i,j}^{n+1}
+=
+u_{i,j}^{n}
++
+\alpha \Delta t
+\left(
+u_{i-1,j}^{n}
++
+u_{i+1,j}^{n}
++
+u_{i,j-1}^{n}
++
+u_{i,j+1}^{n}
+-
+4u_{i,j}^{n}
+\right)
+```
+
+## Boundary Conditions
+
+- `fixed`: the boundary is clamped to the ambient temperature
+- `insulated`: the normal derivative is approximated as zero-flux
+
+## Initial Conditions
+
+The engine currently supports four presets:
+
+- center hotspot
+- left hot wall
+- checkerboard
+- hot ring
+
+## Stability Note
+
+The engine internally subdivides large requested timesteps into smaller substeps so the explicit update remains numerically stable for the selected diffusivity.

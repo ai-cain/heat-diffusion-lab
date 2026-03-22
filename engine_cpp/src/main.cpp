@@ -1,8 +1,8 @@
-#include "pendulum_system.hpp"
+#include "diffusion_system.hpp"
 #include "simulation_engine.hpp"
 
-#include <mutex>
 #include <iostream>
+#include <mutex>
 #include <string>
 
 int main(int argc, char* argv[]) {
@@ -25,35 +25,18 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    int n = 4;
-    double g = 9.8;
-    std::vector<double> lengths;
-    std::vector<double> masses;
-    
-    if (argc >= 2) n = std::stoi(argv[1]);
-    if (argc >= 3) g = std::stod(argv[2]);
-    
-    for (int i = 0; i < n; ++i) {
-        if (argc >= 4 + i) {
-            lengths.push_back(std::stod(argv[3 + i]));
-        } else {
-            lengths.push_back(1.12 / n);
-        }
-    }
+    DiffusionConfig config{
+        argc >= 2 ? std::stoi(argv[1]) : 48,
+        argc >= 3 ? std::stoi(argv[2]) : 32,
+        argc >= 4 ? std::stod(argv[3]) : 0.18,
+        argc >= 5 ? std::stod(argv[4]) : 0.12,
+        argc >= 6 ? std::string(argv[5]) : "fixed",
+        argc >= 7 ? std::string(argv[6]) : "center_hotspot",
+        argc >= 8 ? std::stod(argv[7]) : 18.0,
+        argc >= 9 ? std::stod(argv[8]) : 90.0,
+    };
 
-    for (int i = 0; i < n; ++i) {
-        if (argc >= 4 + n + i) {
-            masses.push_back(std::stod(argv[3 + n + i]));
-        } else {
-            masses.push_back(1.0);
-        }
-    }
-    
-    PendulumSystem sys(n, lengths, masses, g);
-    sys.build_matrices();
-    sys.solve_modes();
-    
-    std::cout << sys.to_json() << std::endl;
-    
+    DiffusionSystem system(config);
+    std::cout << system.to_json(0.0, false, 0) << std::endl;
     return 0;
 }

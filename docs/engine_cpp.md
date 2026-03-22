@@ -1,23 +1,35 @@
 # C++ Engine
 
-The native engine is the place where `Heat Diffusion Lab` should own the real numerical state.
+The native engine owns the real numerical state of `Heat Diffusion Lab`.
 
-## Intended Responsibilities
+## Responsibilities
 
 - store the temperature field
 - apply the diffusion update rule
 - handle boundary conditions
 - emit snapshots for the frontend
 
-## Suggested Numerical Core
+## Main Components
 
-Possible first implementation:
+- `diffusion_system.hpp/.cpp`
+  Stores the grid, resets the initial pattern, advances the finite-difference update, and serializes state as JSON.
+- `simulation_engine.hpp/.cpp`
+  Maintains play/pause state, current simulation time, revision number, and the stdio command loop.
+- `main.cpp`
+  Runs either a one-shot CLI mode or the persistent `--stdio-server` mode.
 
-- 1D or 2D finite-difference heat equation
-- explicit Euler or a stable scheme of your choice
-- configurable timestep and diffusivity
+## Numerical Scheme
 
-## Current Status
+The current implementation uses a 2D explicit finite-difference update with configurable substeps to keep the timestep stable relative to the chosen diffusivity.
 
-The engine directory was copied from the pendulum project as a structural starting point.
-Its files should be rewritten around diffusion data structures and update loops.
+Supported boundary modes:
+
+- `fixed`
+- `insulated`
+
+Supported initial patterns:
+
+- `center_hotspot`
+- `left_wall`
+- `checkerboard`
+- `ring`

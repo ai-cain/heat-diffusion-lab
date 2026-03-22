@@ -1,42 +1,57 @@
 # Architecture
 
-`Heat Diffusion Lab` keeps the same high-level split as the original pendulum project:
+`Heat Diffusion Lab` uses a simple three-layer architecture:
 
-1. The frontend gathers user parameters.
-2. The backend forwards them to the native engine.
-3. The C++ engine advances the simulation state.
-4. The backend streams state snapshots back to the frontend.
-5. The frontend renders the received data.
+1. The frontend gathers simulation parameters and playback actions.
+2. The backend normalizes those messages and forwards them to the engine.
+3. The C++ engine advances the temperature field and emits snapshots.
+4. The backend relays those snapshots back to every connected browser.
+5. The frontend renders the latest state as a heatmap.
 
 ## Layer Responsibilities
 
 ### Frontend
 
-- controls
-- playback
-- visualization
+- simulation controls
+- playback state
 - heatmap rendering
+- recording the canvas stream
 
 ### Backend
 
 - WebSocket server
 - message normalization
 - native process bridge
+- engine lifecycle management
 
 ### C++ Engine
 
-- simulation state
-- diffusion stepping
-- snapshot generation
+- authoritative simulation state
+- finite-difference diffusion stepping
+- boundary handling
+- JSON snapshot generation
 
-## Target Data Flow
+## Data Flow
 
 ```text
-frontend -> backend -> C++ engine
-frontend <- backend <- C++ engine
+frontend --WebSocket JSON--> backend --stdin/stdout--> C++ engine
+frontend <--WebSocket JSON-- backend <--stdout-------- C++ engine
 ```
 
-## Rewrite Direction
+## Command Protocol
 
-The copied scaffold currently uses pendulum-oriented source files.
-The intended rewrite is to replace those with temperature-grid logic while keeping the same architecture.
+Browser messages:
+
+- `configure`
+- `set_playing`
+- `reset`
+- `request_state`
+
+Engine commands:
+
+- `CONFIG`
+- `PLAY`
+- `RESET`
+- `REQUEST_STATE`
+
+The backend is intentionally thin: it should stay focused on transport, validation, and process management rather than numerical work.

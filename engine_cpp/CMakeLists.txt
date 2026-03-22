@@ -4,16 +4,13 @@ project(HeatDiffusionEngine VERSION 1.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# We include the previously downloaded Eigen3 library directly
-include_directories(build/_deps/eigen-src)
-
 find_package(Threads REQUIRED)
 
 add_executable(
-    pendulum_cli
+    heat_diffusion_cli
     src/main.cpp
-    src/pendulum_system.cpp
+    src/diffusion_system.cpp
     src/simulation_engine.cpp
 )
 
-target_link_libraries(pendulum_cli PRIVATE Threads::Threads)
+target_link_libraries(heat_diffusion_cli PRIVATE Threads::Threads)

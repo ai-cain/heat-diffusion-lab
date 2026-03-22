@@ -1,45 +1,23 @@
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import ControlsPanel from './components/ControlsPanel';
 import {
-  clamp,
-  COLOR_PALETTE,
-  computeViewport,
-  createFilledArray,
-  DEFAULT_GRAVITY,
-  DEFAULT_INITIAL_ANGLE,
-  DEFAULT_INITIAL_ANGLES,
-  DEFAULT_LENGTHS,
-  DEFAULT_MASS,
-  DEFAULT_MASSES,
-  INITIAL_N,
-  LINEAR_ANGLE_LIMIT,
-  MAX_TRAIL_POINTS,
-  NONLINEAR_ANGLE_LIMIT,
-  toCanvasPoint,
-  TOTAL_DEFAULT_LENGTH,
-} from './lib/pendulumMath';
-import type { DistributionMode, EngineSnapshot, Point, SimulationMode } from './types';
+  DEFAULT_AMBIENT_TEMPERATURE,
+  DEFAULT_BOUNDARY_MODE,
+  DEFAULT_DIFFUSIVITY,
+  DEFAULT_GRID_HEIGHT,
+  DEFAULT_GRID_WIDTH,
+  DEFAULT_HOTSPOT_TEMPERATURE,
+  DEFAULT_INITIAL_PATTERN,
+  DEFAULT_TIME_STEP,
+  formatBoundaryMode,
+  formatInitialPattern,
+  getTemperatureColor,
+} from './lib/heatLabMath';
+import type { BoundaryMode, HeatSnapshot, InitialPattern } from './types';
 import './index.css';
 
-const buildDefaultLengths = (count: number) =>
-  count === INITIAL_N ? [...DEFAULT_LENGTHS] : createFilledArray(count, TOTAL_DEFAULT_LENGTH / count);
-
-const buildDefaultMasses = (count: number) =>
-  count === INITIAL_N ? [...DEFAULT_MASSES] : createFilledArray(count, DEFAULT_MASS);
-
-const buildDefaultAngles = (count: number) =>
-  count === INITIAL_N
-    ? [...DEFAULT_INITIAL_ANGLES]
-    : Array.from({ length: count }, (_, index) => (index === 0 ? DEFAULT_INITIAL_ANGLE : 0));
-
-const resizeSeries = (
-  current: number[],
-  nextCount: number,
-  fallback: (index: number) => number,
-) => Array.from({ length: nextCount }, (_, index) => current[index] ?? fallback(index));
-
 const backendWebSocketUrl =
-  import.meta.env.VITE_BACKEND_WS_URL?.trim() || 'ws://localhost:3001';
+  import.meta.env.VITE_BACKEND_WS_URL?.trim() || 'ws://localhost:3002';
 
 const recordingMimeTypes = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
 
@@ -51,11 +29,7 @@ const getSupportedRecordingMimeType = () => {
   return recordingMimeTypes.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ?? '';
 };
 
-const drawSnapshot = (
-  canvas: HTMLCanvasElement,
-  snapshot: EngineSnapshot,
-  trails: Point[][],
-) => {
+const drawHeatSnapshot = (canvas: HTMLCanvasElement, snapshot: HeatSnapshot) => {
   const context = canvas.getContext('2d');
   if (!context) {
     return;
@@ -63,86 +37,66 @@ const drawSnapshot = (
 
   const width = canvas.width;
   const height = canvas.height;
-  const scenePoints: Point[] = [{ x: 0, y: 0 }, ...snapshot.positions];
-  trails.forEach((trail) => {
-    scenePoints.push(...trail);
-  });
-
-  const viewport = computeViewport(scenePoints, width, height);
-  const anchorPoint = toCanvasPoint({ x: 0, y: 0 }, viewport);
-  const canvasPositions = snapshot.positions.map((point) => toCanvasPoint(point, viewport));
-  const canvasTrails = trails.map((trail) => trail.map((point) => toCanvasPoint(point, viewport)));
+  const cellWidth = width / snapshot.grid_width;
+  const cellHeight = height / snapshot.grid_height;
 
   context.clearRect(0, 0, width, height);
+  context.fillStyle = '#08131f';
+  context.fillRect(0, 0, width, height);
 
-  context.beginPath();
-  context.moveTo(anchorPoint.x - 120, anchorPoint.y);
-  context.lineTo(anchorPoint.x + 120, anchorPoint.y);
-  context.lineWidth = 3;
-  context.strokeStyle = 'rgba(31, 37, 50, 0.2)';
-  context.stroke();
+  for (let row = 0; row < snapshot.grid_height; row += 1) {
+    for (let column = 0; column < snapshot.grid_width; column += 1) {
+      const index = row * snapshot.grid_width + column;
+      const temperature = snapshot.temperatures[index] ?? snapshot.ambient_temperature;
+      context.fillStyle = getTemperatureColor(
+        temperature,
+        snapshot.ambient_temperature,
+        snapshot.hotspot_temperature,
+      );
+      context.fillRect(
+        column * cellWidth,
+        row * cellHeight,
+        Math.ceil(cellWidth) + 0.5,
+        Math.ceil(cellHeight) + 0.5,
+      );
+    }
+  }
 
-  context.beginPath();
-  context.arc(anchorPoint.x, anchorPoint.y, 4, 0, Math.PI * 2);
-  context.fillStyle = 'rgba(31, 37, 50, 0.48)';
-  context.fill();
+  if (cellWidth >= 14 && cellHeight >= 14) {
+    context.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    context.lineWidth = 1;
 
-  context.lineCap = 'round';
-  canvasTrails.forEach((trail, index) => {
-    const rgb = COLOR_PALETTE[index % COLOR_PALETTE.length];
-
-    for (let pointIndex = 1; pointIndex < trail.length; pointIndex += 1) {
-      const progress = pointIndex / Math.max(1, trail.length - 1);
-      const alpha = 0.03 + Math.pow(progress, 2.1) * 0.42;
-      const widthScale = 0.85 + progress * 1.45;
-
+    for (let column = 1; column < snapshot.grid_width; column += 1) {
+      const x = column * cellWidth;
       context.beginPath();
-      context.moveTo(trail[pointIndex - 1].x, trail[pointIndex - 1].y);
-      context.lineTo(trail[pointIndex].x, trail[pointIndex].y);
-      context.lineWidth = widthScale;
-      context.strokeStyle = `rgba(${rgb}, ${alpha})`;
+      context.moveTo(x, 0);
+      context.lineTo(x, height);
       context.stroke();
     }
-  });
 
-  let previousPoint = anchorPoint;
-  canvasPositions.forEach((point, index) => {
-    const rgb = COLOR_PALETTE[index % COLOR_PALETTE.length];
-
-    context.beginPath();
-    context.moveTo(previousPoint.x, previousPoint.y);
-    context.lineTo(point.x, point.y);
-    context.lineWidth = 2;
-    context.strokeStyle = 'rgba(53, 60, 74, 0.38)';
-    context.stroke();
-
-    context.beginPath();
-    context.arc(point.x, point.y, 11, 0, Math.PI * 2);
-    context.fillStyle = `rgba(${rgb}, 0.82)`;
-    context.fill();
-    context.lineWidth = 2;
-    context.strokeStyle = 'rgba(255, 252, 247, 0.92)';
-    context.stroke();
-
-    previousPoint = point;
-  });
+    for (let row = 1; row < snapshot.grid_height; row += 1) {
+      const y = row * cellHeight;
+      context.beginPath();
+      context.moveTo(0, y);
+      context.lineTo(width, y);
+      context.stroke();
+    }
+  }
 };
 
 function App() {
-  const [simulationMode, setSimulationMode] = useState<SimulationMode>('nonlinear');
-  const [lengthMode, setLengthMode] = useState<DistributionMode>('independent');
-  const [massMode, setMassMode] = useState<DistributionMode>('independent');
-  const [angleMode, setAngleMode] = useState<DistributionMode>('independent');
+  const [gridWidth, setGridWidth] = useState(DEFAULT_GRID_WIDTH);
+  const [gridHeight, setGridHeight] = useState(DEFAULT_GRID_HEIGHT);
+  const [diffusivity, setDiffusivity] = useState(DEFAULT_DIFFUSIVITY);
+  const [timeStep, setTimeStep] = useState(DEFAULT_TIME_STEP);
+  const [ambientTemperature, setAmbientTemperature] = useState(DEFAULT_AMBIENT_TEMPERATURE);
+  const [hotspotTemperature, setHotspotTemperature] = useState(DEFAULT_HOTSPOT_TEMPERATURE);
+  const [boundaryMode, setBoundaryMode] = useState<BoundaryMode>(DEFAULT_BOUNDARY_MODE);
+  const [initialPattern, setInitialPattern] = useState<InitialPattern>(DEFAULT_INITIAL_PATTERN);
 
-  const [n, setN] = useState(INITIAL_N);
-  const [g, setG] = useState(DEFAULT_GRAVITY);
-  const [lengths, setLengths] = useState<number[]>(buildDefaultLengths(INITIAL_N));
-  const [masses, setMasses] = useState<number[]>(buildDefaultMasses(INITIAL_N));
-  const [initialAngles, setInitialAngles] = useState<number[]>(buildDefaultAngles(INITIAL_N));
-
-  const [snapshot, setSnapshot] = useState<EngineSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<HeatSnapshot | null>(null);
   const [error, setError] = useState('');
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isSocketReady, setIsSocketReady] = useState(false);
   const [recordingError, setRecordingError] = useState('');
@@ -152,24 +106,13 @@ function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingUrlRef = useRef<string | null>(null);
-  const trailHistoryRef = useRef<Point[][]>(Array.from({ length: INITIAL_N }, () => []));
-  const lastTrailRevisionRef = useRef(-1);
-  const lastTrailTimeRef = useRef(Number.NEGATIVE_INFINITY);
-  const isPlayingRef = useRef(isPlaying);
   const lastConfigKeyRef = useRef('');
+  const isPlayingRef = useRef(isPlaying);
 
-  const angleLimit =
-    simulationMode === 'linear' ? LINEAR_ANGLE_LIMIT : NONLINEAR_ANGLE_LIMIT;
   const isRecordingSupported =
     typeof MediaRecorder !== 'undefined' &&
     typeof HTMLCanvasElement !== 'undefined' &&
     'captureStream' in HTMLCanvasElement.prototype;
-
-  const resetTrailState = (count: number) => {
-    trailHistoryRef.current = Array.from({ length: count }, () => []);
-    lastTrailRevisionRef.current = -1;
-    lastTrailTimeRef.current = Number.NEGATIVE_INFINITY;
-  };
 
   const releaseRecordingUrl = () => {
     if (!recordingUrlRef.current) {
@@ -228,7 +171,9 @@ function App() {
         }
 
         if (message.type === 'state') {
-          setSnapshot(message.data as EngineSnapshot);
+          const nextSnapshot = message.data as HeatSnapshot;
+          setSnapshot(nextSnapshot);
+          setIsPlaying(nextSnapshot.playing);
           setError('');
         }
       } catch {
@@ -279,12 +224,14 @@ function App() {
     }
 
     const configKey = JSON.stringify({
-      simulationMode,
-      n,
-      g,
-      lengths,
-      masses,
-      initialAngles,
+      gridWidth,
+      gridHeight,
+      diffusivity,
+      timeStep,
+      boundaryMode,
+      initialPattern,
+      ambientTemperature,
+      hotspotTemperature,
       playing: isPlayingRef.current,
     });
 
@@ -297,16 +244,29 @@ function App() {
     sendSocketMessage({
       type: 'configure',
       data: {
-        simulationMode,
-        n,
-        g,
-        lengths,
-        masses,
-        initialAngles,
+        gridWidth,
+        gridHeight,
+        diffusivity,
+        timeStep,
+        boundaryMode,
+        initialPattern,
+        ambientTemperature,
+        hotspotTemperature,
         playing: isPlayingRef.current,
       },
     });
-  }, [g, initialAngles, isSocketReady, lengths, masses, n, simulationMode]);
+  }, [
+    ambientTemperature,
+    boundaryMode,
+    diffusivity,
+    gridHeight,
+    gridWidth,
+    hotspotTemperature,
+    initialPattern,
+    isSocketReady,
+    sendSocketMessage,
+    timeStep,
+  ]);
 
   useEffect(() => {
     if (!isSocketReady) {
@@ -317,7 +277,7 @@ function App() {
       type: 'set_playing',
       data: { playing: isPlaying },
     });
-  }, [isPlaying, isSocketReady]);
+  }, [isPlaying, isSocketReady, sendSocketMessage]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -331,187 +291,20 @@ function App() {
       return;
     }
 
-    if (
-      lastTrailRevisionRef.current !== snapshot.revision ||
-      snapshot.time < lastTrailTimeRef.current
-    ) {
-      resetTrailState(snapshot.positions.length);
-    }
-
-    if (trailHistoryRef.current.length !== snapshot.positions.length) {
-      trailHistoryRef.current = Array.from({ length: snapshot.positions.length }, () => []);
-    }
-
-    if (snapshot.playing && snapshot.time > lastTrailTimeRef.current + 1e-9) {
-      snapshot.positions.forEach((position, index) => {
-        const trail = trailHistoryRef.current[index];
-        trail.push(position);
-
-        if (trail.length > MAX_TRAIL_POINTS) {
-          trail.shift();
-        }
-      });
-    }
-
-    lastTrailRevisionRef.current = snapshot.revision;
-    lastTrailTimeRef.current = snapshot.time;
-
-    drawSnapshot(canvas, snapshot, trailHistoryRef.current);
+    drawHeatSnapshot(canvas, snapshot);
   }, [snapshot]);
 
-  const updateLengths = (nextLengths: number[]) => {
-    setLengths(nextLengths);
-    resetTrailState(nextLengths.length);
+  const handleAmbientTemperatureChange = (value: number) => {
+    setAmbientTemperature(value);
+    setHotspotTemperature((currentValue) => Math.max(currentValue, value + 1));
   };
 
-  const updateMasses = (nextMasses: number[]) => {
-    setMasses(nextMasses);
-    resetTrailState(nextMasses.length);
-  };
-
-  const updateAngles = (nextAngles: number[]) => {
-    setInitialAngles(nextAngles);
-    resetTrailState(nextAngles.length);
-  };
-
-  const handleSimulationModeChange = (nextMode: SimulationMode) => {
-    if (nextMode === simulationMode) {
-      return;
-    }
-
-    const nextLimit = nextMode === 'linear' ? LINEAR_ANGLE_LIMIT : NONLINEAR_ANGLE_LIMIT;
-    const nextAngles = initialAngles.map((angle) => clamp(angle, -nextLimit, nextLimit));
-
-    setSimulationMode(nextMode);
-    updateAngles(nextAngles);
-  };
-
-  const handleNChange = (nextCount: number) => {
-    const defaultLengths = buildDefaultLengths(nextCount);
-    const defaultMasses = buildDefaultMasses(nextCount);
-    const defaultAngles = buildDefaultAngles(nextCount);
-
-    const nextLengths =
-      lengthMode === 'equal'
-        ? createFilledArray(nextCount, lengths[0] ?? defaultLengths[0])
-        : resizeSeries(lengths, nextCount, (index) => defaultLengths[index] ?? defaultLengths[0]);
-
-    const nextMasses =
-      massMode === 'equal'
-        ? createFilledArray(nextCount, masses[0] ?? defaultMasses[0])
-        : resizeSeries(masses, nextCount, (index) => defaultMasses[index] ?? defaultMasses[0]);
-
-    const nextAngles =
-      angleMode === 'equal'
-        ? createFilledArray(
-            nextCount,
-            clamp(initialAngles[0] ?? defaultAngles[0], -angleLimit, angleLimit),
-          )
-        : resizeSeries(initialAngles, nextCount, (index) =>
-            clamp(defaultAngles[index] ?? 0, -angleLimit, angleLimit),
-          );
-
-    setN(nextCount);
-    setLengths(nextLengths);
-    setMasses(nextMasses);
-    setInitialAngles(nextAngles);
-    resetTrailState(nextCount);
-  };
-
-  const handleLengthModeChange = (nextMode: DistributionMode) => {
-    if (nextMode === lengthMode) {
-      return;
-    }
-
-    setLengthMode(nextMode);
-
-    if (nextMode === 'equal') {
-      updateLengths(createFilledArray(n, lengths[0] ?? TOTAL_DEFAULT_LENGTH / n));
-      return;
-    }
-
-    updateLengths(
-      resizeSeries(lengths, n, (index) => buildDefaultLengths(n)[index] ?? TOTAL_DEFAULT_LENGTH / n),
-    );
-  };
-
-  const handleMassModeChange = (nextMode: DistributionMode) => {
-    if (nextMode === massMode) {
-      return;
-    }
-
-    setMassMode(nextMode);
-
-    if (nextMode === 'equal') {
-      updateMasses(createFilledArray(n, masses[0] ?? DEFAULT_MASS));
-      return;
-    }
-
-    updateMasses(resizeSeries(masses, n, (index) => buildDefaultMasses(n)[index] ?? DEFAULT_MASS));
-  };
-
-  const handleAngleModeChange = (nextMode: DistributionMode) => {
-    if (nextMode === angleMode) {
-      return;
-    }
-
-    setAngleMode(nextMode);
-
-    if (nextMode === 'equal') {
-      updateAngles(
-        createFilledArray(
-          n,
-          clamp(initialAngles[0] ?? DEFAULT_INITIAL_ANGLE, -angleLimit, angleLimit),
-        ),
-      );
-      return;
-    }
-
-    updateAngles(
-      resizeSeries(initialAngles, n, (index) =>
-        clamp(buildDefaultAngles(n)[index] ?? 0, -angleLimit, angleLimit),
-      ),
-    );
-  };
-
-  const handleGravityChange = (value: number) => {
-    setG(value);
-    resetTrailState(n);
-  };
-
-  const handleSharedLengthChange = (value: number) => {
-    updateLengths(createFilledArray(n, value));
-  };
-
-  const handleSharedMassChange = (value: number) => {
-    updateMasses(createFilledArray(n, value));
-  };
-
-  const handleSharedAngleChange = (value: number) => {
-    updateAngles(createFilledArray(n, value));
-  };
-
-  const handleLengthChange = (index: number, value: number) => {
-    const nextLengths = [...lengths];
-    nextLengths[index] = value;
-    updateLengths(nextLengths);
-  };
-
-  const handleMassChange = (index: number, value: number) => {
-    const nextMasses = [...masses];
-    nextMasses[index] = value;
-    updateMasses(nextMasses);
-  };
-
-  const handleAngleChange = (index: number, value: number) => {
-    const nextAngles = [...initialAngles];
-    nextAngles[index] = value;
-    updateAngles(nextAngles);
+  const handleHotspotTemperatureChange = (value: number) => {
+    setHotspotTemperature(Math.max(value, ambientTemperature + 1));
   };
 
   const handleReset = () => {
     setIsPlaying(false);
-    resetTrailState(n);
     sendSocketMessage({ type: 'reset' });
     sendSocketMessage({ type: 'set_playing', data: { playing: false } });
   };
@@ -530,7 +323,6 @@ function App() {
     }
 
     const canvas = canvasRef.current;
-
     if (!canvas) {
       setRecordingError('Canvas is not ready yet.');
       return;
@@ -539,7 +331,7 @@ function App() {
     const mimeType = getSupportedRecordingMimeType();
 
     try {
-      const stream = canvas.captureStream(60);
+      const stream = canvas.captureStream(30);
       const recorder = mimeType
         ? new MediaRecorder(stream, { mimeType })
         : new MediaRecorder(stream);
@@ -554,7 +346,7 @@ function App() {
       };
 
       recorder.onerror = () => {
-        setRecordingError('Recording failed while capturing the canvas.');
+        setRecordingError('Recording failed while capturing the heatmap canvas.');
         setIsRecording(false);
         mediaRecorderRef.current = null;
         recordedChunksRef.current = [];
@@ -581,45 +373,35 @@ function App() {
       recorder.start(250);
       setIsRecording(true);
     } catch {
-      setRecordingError('The browser could not start recording the template canvas.');
+      setRecordingError('The browser could not start recording the heatmap canvas.');
       setIsRecording(false);
     }
   };
-
-  const headerDescription =
-    simulationMode === 'nonlinear'
-      ? 'Template workspace copied from the pendulum lab.'
-      : 'Template workspace copied from the pendulum lab.';
-
-  const modeNote =
-    simulationMode === 'nonlinear'
-      ? 'Rewrite this shell around heat diffusion parameters and snapshots.'
-      : 'Rewrite this shell around heat diffusion parameters and snapshots.';
 
   const stageStatusLabel = !isSocketReady
     ? 'Engine offline'
     : snapshot
       ? snapshot.playing
-        ? 'Engine streaming'
-        : 'Engine synced'
+        ? 'Streaming state'
+        : 'Ready to step'
       : 'Awaiting engine state';
 
   const metricCards = [
     {
-      label: 'Mode',
-      value: simulationMode === 'nonlinear' ? 'Full dynamics' : 'Normal modes',
+      label: 'Grid',
+      value: `${gridWidth} x ${gridHeight}`,
     },
     {
-      label: 'Chain',
-      value: `${n} bodies`,
+      label: 'Diffusivity',
+      value: diffusivity.toFixed(2),
     },
     {
-      label: 'Gravity',
-      value: `${g.toFixed(2)} m/s^2`,
+      label: 'Boundary',
+      value: formatBoundaryMode(boundaryMode),
     },
     {
-      label: 'Status',
-      value: isPlaying ? 'Animating' : 'Paused',
+      label: 'Preset',
+      value: formatInitialPattern(initialPattern),
     },
   ];
 
@@ -629,7 +411,9 @@ function App() {
         <div className="hero-copy">
           <span className="eyebrow">Heat Diffusion</span>
           <h1>Heat Diffusion Lab</h1>
-          <p>{headerDescription}</p>
+          <p>
+            Native C++ engine streaming a 2D temperature field to a lightweight web UI.
+          </p>
         </div>
 
         <div className="hero-metrics">
@@ -643,46 +427,14 @@ function App() {
       </header>
 
       <main className="workspace">
-        <ControlsPanel
-          simulationMode={simulationMode}
-          modeNote={modeNote}
-          isPlaying={isPlaying}
-          isRecording={isRecording}
-          isRecordingSupported={isRecordingSupported}
-          isSocketReady={isSocketReady}
-          n={n}
-          g={g}
-          lengthMode={lengthMode}
-          massMode={massMode}
-          angleMode={angleMode}
-          angleLimit={angleLimit}
-          lengths={lengths}
-          masses={masses}
-          initialAngles={initialAngles}
-          error={error}
-          recordingError={recordingError}
-          onSimulationModeChange={handleSimulationModeChange}
-          onTogglePlay={() => setIsPlaying((value) => !value)}
-          onToggleRecording={handleToggleRecording}
-          onReset={handleReset}
-          onNChange={handleNChange}
-          onGravityChange={handleGravityChange}
-          onLengthModeChange={handleLengthModeChange}
-          onMassModeChange={handleMassModeChange}
-          onAngleModeChange={handleAngleModeChange}
-          onSharedAngleChange={handleSharedAngleChange}
-          onSharedLengthChange={handleSharedLengthChange}
-          onSharedMassChange={handleSharedMassChange}
-          onAngleChange={handleAngleChange}
-          onLengthChange={handleLengthChange}
-          onMassChange={handleMassChange}
-        />
-
         <section className="stage-panel card">
           <div className="stage-header">
             <div>
               <span className="section-eyebrow">Live View</span>
-              <h2>Template stage</h2>
+              <h2>Temperature field</h2>
+              <p className="canvas-caption">
+                Colors track the plate temperature from the ambient baseline to the injected hotspot.
+              </p>
             </div>
 
             <div className="stage-badges">
@@ -690,20 +442,71 @@ function App() {
               <span className={`status-pill ${isPlaying ? 'active' : ''}`}>
                 {isPlaying ? 'Running' : 'Paused'}
               </span>
-              <span
-                className={`status-pill ${
-                  !isSocketReady ? 'warning' : 'success'
-                }`}
-              >
+              <span className={`status-pill ${!isSocketReady ? 'warning' : 'success'}`}>
                 {stageStatusLabel}
               </span>
             </div>
           </div>
 
-          <div className="canvas-frame">
-            <canvas ref={canvasRef} width={700} height={760}></canvas>
+          <div className="canvas-frame heat-frame">
+            <canvas ref={canvasRef} width={900} height={600}></canvas>
+          </div>
+
+          <div className="legend-panel">
+            <div className="legend-bar"></div>
+            <div className="legend-scale">
+              <span>{ambientTemperature.toFixed(1)} C</span>
+              <span>{hotspotTemperature.toFixed(1)} C</span>
+            </div>
+          </div>
+
+          <div className="status-grid">
+            <article className="mini-stat">
+              <span>Sim time</span>
+              <strong>{snapshot ? snapshot.time.toFixed(2) : '0.00'}</strong>
+            </article>
+            <article className="mini-stat">
+              <span>Min temp</span>
+              <strong>{snapshot ? `${snapshot.min_temperature.toFixed(1)} C` : '--'}</strong>
+            </article>
+            <article className="mini-stat">
+              <span>Avg temp</span>
+              <strong>{snapshot ? `${snapshot.average_temperature.toFixed(1)} C` : '--'}</strong>
+            </article>
+            <article className="mini-stat">
+              <span>Max temp</span>
+              <strong>{snapshot ? `${snapshot.max_temperature.toFixed(1)} C` : '--'}</strong>
+            </article>
           </div>
         </section>
+
+        <ControlsPanel
+          isPlaying={isPlaying}
+          isRecording={isRecording}
+          isRecordingSupported={isRecordingSupported}
+          isSocketReady={isSocketReady}
+          gridWidth={gridWidth}
+          gridHeight={gridHeight}
+          diffusivity={diffusivity}
+          timeStep={timeStep}
+          ambientTemperature={ambientTemperature}
+          hotspotTemperature={hotspotTemperature}
+          boundaryMode={boundaryMode}
+          initialPattern={initialPattern}
+          error={error}
+          recordingError={recordingError}
+          onTogglePlay={() => setIsPlaying((value) => !value)}
+          onToggleRecording={handleToggleRecording}
+          onReset={handleReset}
+          onGridWidthChange={setGridWidth}
+          onGridHeightChange={setGridHeight}
+          onDiffusivityChange={setDiffusivity}
+          onTimeStepChange={setTimeStep}
+          onAmbientTemperatureChange={handleAmbientTemperatureChange}
+          onHotspotTemperatureChange={handleHotspotTemperatureChange}
+          onBoundaryModeChange={setBoundaryMode}
+          onInitialPatternChange={setInitialPattern}
+        />
       </main>
     </div>
   );

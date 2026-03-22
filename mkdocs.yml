@@ -1,5 +1,5 @@
 site_name: Heat Diffusion Lab
-site_description: Documentation scaffold for a native-engine heat diffusion simulator
+site_description: Native-engine heat diffusion simulator with a web UI
 theme:
   name: material
 nav:

@@ -1,22 +1,29 @@
 # Frontend
 
-The frontend should become a visualization shell for the native heat-diffusion engine.
+The frontend is the visualization shell for the native heat-diffusion engine.
 
-## Intended Responsibilities
+## Responsibilities
 
 - editing simulation parameters
 - showing current status
-- rendering a heatmap or scalar field
+- rendering the temperature field as a heatmap
 - controlling playback
-- optionally plotting temperature slices over time
+- recording the canvas output
 
-## Rewrite Direction
+## Current Behavior
 
-The copied frontend still reflects the pendulum project structure and UI logic.
-That is expected for this scaffold.
+The main application lives in `frontend_web/src/App.tsx`.
+It:
 
-The main rewrite path is:
+- opens a WebSocket connection to the backend
+- sends normalized `configure` payloads
+- sends play/pause and reset commands
+- receives `state` snapshots from the engine
+- draws the current grid on a `<canvas>`
 
-1. Replace pendulum-oriented controls with diffusion controls.
-2. Replace the pendulum canvas renderer with a heatmap renderer.
-3. Keep the WebSocket pattern and overall application shell.
+## Main Files
+
+- `src/App.tsx`: socket lifecycle, rendering, and page layout
+- `src/components/ControlsPanel.tsx`: parameter controls
+- `src/lib/heatLabMath.ts`: defaults, labels, and heatmap colors
+- `src/types.ts`: shared frontend snapshot types

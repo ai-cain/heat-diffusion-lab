@@ -1,23 +1,28 @@
 # Heat Diffusion Lab
 
-Documentation scaffold for a heat-diffusion project built from the same architecture as the pendulum lab.
+Interactive heat-diffusion simulator powered by a native C++ engine.
 
-## Vision
+## Overview
 
-The long-term goal is an interactive environment where:
+The project is split into three clear layers:
 
-- the native C++ engine advances a temperature field
-- the backend streams state snapshots
-- the frontend renders heatmaps and controls
+- `engine_cpp/`: advances the temperature field and owns simulation state
+- `backend_node/`: manages the native process and exposes a WebSocket API
+- `frontend_web/`: renders the heatmap and exposes playback/configuration controls
 
-## Structure
+## What You Can Control
 
-- `frontend_web/`: UI and rendering
-- `backend_node/`: WebSocket bridge
-- `engine_cpp/`: native solver
-- `docs/`: project docs
+- grid width and height
+- thermal diffusivity
+- numerical timestep
+- boundary condition mode
+- initial temperature preset
+- ambient and hotspot temperatures
 
-## Important Note
+## What The UI Shows
 
-This folder is a project template cloned from the pendulum codebase.
-Some current implementation details still refer to the original project and are expected to be rewritten.
+- live temperature heatmap
+- simulation time
+- min, average, and max temperature
+- engine connection state
+- canvas recording support

@@ -1,6 +1,6 @@
 # Development Guide
 
-This page is for working locally on the `Heat Diffusion Lab` scaffold.
+This page describes the local workflow for `Heat Diffusion Lab`.
 
 ## Prerequisites
 
@@ -29,6 +29,8 @@ pnpm install
 pnpm start
 ```
 
+Default backend URL: `ws://localhost:3002`
+
 ### Start the frontend
 
 ```powershell
@@ -37,7 +39,7 @@ pnpm install
 pnpm dev
 ```
 
-The copied scaffold should then be available at `http://localhost:5173/`.
+Default frontend URL: `http://localhost:5173/`
 
 ## Typical Edit Paths
 
@@ -45,7 +47,7 @@ The copied scaffold should then be available at `http://localhost:5173/`.
   - [frontend_web/src/App.tsx](/c:/Users/SMARTECHLATAM%20GERALD/Desktop/git3/heat-diffusion-lab/frontend_web/src/App.tsx)
 - backend bridge behavior
   - [backend_node/server.js](/c:/Users/SMARTECHLATAM%20GERALD/Desktop/git3/heat-diffusion-lab/backend_node/server.js)
-- native engine rewrite
+- native engine logic
   - [engine_cpp/src/simulation_engine.cpp](/c:/Users/SMARTECHLATAM%20GERALD/Desktop/git3/heat-diffusion-lab/engine_cpp/src/simulation_engine.cpp)
 - documentation site
   - [mkdocs.yml](/c:/Users/SMARTECHLATAM%20GERALD/Desktop/git3/heat-diffusion-lab/mkdocs.yml)
@@ -65,7 +67,16 @@ C++ build:
 cmake --build engine_cpp/build --config Release
 ```
 
-## Important Note
+Backend syntax check:
 
-This is still a copied template.
-The current engine and UI internals are intentionally inherited from the source project and should be rewritten toward heat diffusion.
+```powershell
+cd backend_node
+node --check server.js
+```
+
+Frontend production build:
+
+```powershell
+cd frontend_web
+pnpm build
+```

@@ -13,32 +13,30 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(cors());
 
-const port = Number(process.env.PORT) || 3001;
+const port = Number(process.env.PORT) || 3002;
 const clients = new Set();
 
-const TOTAL_DEFAULT_LENGTH = 1.12;
-const DEFAULT_GRAVITY = 9.8;
-const DEFAULT_MASS = 1.0;
-const DEFAULT_INITIAL_ANGLE = 0.6;
-const INITIAL_N = 2;
+const DEFAULT_GRID_WIDTH = 48;
+const DEFAULT_GRID_HEIGHT = 32;
+const DEFAULT_DIFFUSIVITY = 0.18;
+const DEFAULT_TIME_STEP = 0.12;
+const DEFAULT_AMBIENT_TEMPERATURE = 18;
+const DEFAULT_HOTSPOT_TEMPERATURE = 90;
 
-const buildDefaultLengths = (count) =>
-  count === INITIAL_N ? [0.46, 0.76] : Array(count).fill(TOTAL_DEFAULT_LENGTH / count);
-
-const buildDefaultMasses = (count) =>
-  count === INITIAL_N ? [1.35, 0.8] : Array(count).fill(DEFAULT_MASS);
-
-const buildDefaultAngles = (count) =>
-  count === INITIAL_N
-    ? [0.95, -0.35]
-    : Array.from({ length: count }, (_, index) => (index === 0 ? DEFAULT_INITIAL_ANGLE : 0));
+const allowedBoundaryModes = new Set(['fixed', 'insulated']);
+const allowedInitialPatterns = new Set([
+  'center_hotspot',
+  'left_wall',
+  'checkerboard',
+  'ring',
+]);
 
 const resolveEnginePath = () => {
   const extension = process.platform === 'win32' ? '.exe' : '';
   const candidates = [
-    path.resolve(__dirname, `../engine_cpp/build/Release/pendulum_cli${extension}`),
-    path.resolve(__dirname, `../engine_cpp/build/pendulum_cli${extension}`),
-    path.resolve(__dirname, `../engine_cpp/build/Debug/pendulum_cli${extension}`),
+    path.resolve(__dirname, `../engine_cpp/build/Release/heat_diffusion_cli${extension}`),
+    path.resolve(__dirname, `../engine_cpp/build/heat_diffusion_cli${extension}`),
+    path.resolve(__dirname, `../engine_cpp/build/Debug/heat_diffusion_cli${extension}`),
   ];
 
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? candidates[0];
@@ -82,11 +80,9 @@ const startEngine = () => {
   const stdoutReader = readline.createInterface({ input: engineProcess.stdout });
   stdoutReader.on('line', (line) => {
     const payload = line.trim();
-    if (!payload) {
-      return;
+    if (payload) {
+      broadcast(payload);
     }
-
-    broadcast(payload);
   });
 
   engineProcess.stderr.on('data', (chunk) => {
@@ -111,7 +107,7 @@ const startEngine = () => {
   });
 };
 
-const sendEngineCommand = (command, ws) => {
+const sendEngineCommand = (command, ws = null) => {
   if (engineUnavailableReason) {
     sendBackendError(engineUnavailableReason, ws);
     return;
@@ -130,46 +126,72 @@ const sanitizeNumber = (value, fallback) => {
   return Number.isFinite(numericValue) ? numericValue : fallback;
 };
 
-const sanitizeSeries = (values, count, defaults) =>
-  Array.from({ length: count }, (_, index) => sanitizeNumber(values?.[index], defaults[index]));
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const normalizeConfig = (raw) => {
-  const n = Math.max(1, Math.min(10, Math.round(sanitizeNumber(raw.n, INITIAL_N))));
-  const simulationMode = raw.simulationMode === 'linear' ? 'linear' : 'nonlinear';
-  const g = sanitizeNumber(raw.g, DEFAULT_GRAVITY);
-  const defaultLengths = buildDefaultLengths(n);
-  const defaultMasses = buildDefaultMasses(n);
-  const defaultAngles = buildDefaultAngles(n);
+  const gridWidth = Math.round(clamp(sanitizeNumber(raw.gridWidth, DEFAULT_GRID_WIDTH), 8, 160));
+  const gridHeight = Math.round(clamp(sanitizeNumber(raw.gridHeight, DEFAULT_GRID_HEIGHT), 8, 120));
+  const diffusivity = clamp(sanitizeNumber(raw.diffusivity, DEFAULT_DIFFUSIVITY), 0.01, 1.5);
+  const timeStep = clamp(sanitizeNumber(raw.timeStep, DEFAULT_TIME_STEP), 0.01, 1.0);
+  const boundaryMode = allowedBoundaryModes.has(raw.boundaryMode) ? raw.boundaryMode : 'fixed';
+  const initialPattern = allowedInitialPatterns.has(raw.initialPattern)
+    ? raw.initialPattern
+    : 'center_hotspot';
+  const ambientTemperature = clamp(
+    sanitizeNumber(raw.ambientTemperature, DEFAULT_AMBIENT_TEMPERATURE),
+    -50,
+    150,
+  );
+  const hotspotTemperature = clamp(
+    sanitizeNumber(raw.hotspotTemperature, DEFAULT_HOTSPOT_TEMPERATURE),
+    ambientTemperature + 1,
+    400,
+  );
 
   return {
-    simulationMode,
-    n,
-    g,
-    lengths: sanitizeSeries(raw.lengths, n, defaultLengths),
-    masses: sanitizeSeries(raw.masses, n, defaultMasses),
-    initialAngles: sanitizeSeries(raw.initialAngles, n, defaultAngles),
+    gridWidth,
+    gridHeight,
+    diffusivity,
+    timeStep,
+    boundaryMode,
+    initialPattern,
+    ambientTemperature,
+    hotspotTemperature,
   };
 };
 
-const serializeArray = (values) => values.map((value) => Number(value).toString()).join(',');
+const server = app.listen(port);
 
-const server = app.listen(port, () => {
-  console.log(`Node API Server listening on port ${port}`);
+server.on('listening', () => {
+  console.log(`Heat Diffusion backend listening on port ${port}`);
   console.log(`C++ Engine Path: ${enginePath}`);
+});
+
+server.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Port ${port} is already in use. Stop the other backend or set PORT.`);
+    return;
+  }
+
+  console.error('HTTP server failed:', error.message);
 });
 
 startEngine();
 
 const wss = new WebSocketServer({ server });
 
+wss.on('error', (error) => {
+  console.error('WebSocket server failed:', error.message);
+});
+
 wss.on('connection', (ws) => {
   clients.add(ws);
-  console.log('Client connected to WebSocket.');
 
   if (engineUnavailableReason) {
     sendBackendError(engineUnavailableReason, ws);
   } else {
     ws.send(JSON.stringify({ type: 'ready' }));
+    sendEngineCommand('REQUEST_STATE', ws);
   }
 
   ws.on('message', (message) => {
@@ -181,12 +203,14 @@ wss.on('connection', (ws) => {
         sendEngineCommand(
           [
             'CONFIG',
-            config.simulationMode,
-            config.n,
-            config.g,
-            serializeArray(config.lengths),
-            serializeArray(config.masses),
-            serializeArray(config.initialAngles),
+            config.gridWidth,
+            config.gridHeight,
+            config.diffusivity,
+            config.timeStep,
+            config.boundaryMode,
+            config.initialPattern,
+            config.ambientTemperature,
+            config.hotspotTemperature,
             payload.data?.playing ? 1 : 0,
           ].join('\t'),
           ws,
@@ -210,15 +234,13 @@ wss.on('connection', (ws) => {
       }
 
       sendBackendError('Unknown message type.', ws);
-    } catch (error) {
-      console.error('Invalid message format:', message.toString());
+    } catch {
       sendBackendError('Invalid message format. Send JSON.', ws);
     }
   });
 
   ws.on('close', () => {
     clients.delete(ws);
-    console.log('Client disconnected.');
   });
 });
 
