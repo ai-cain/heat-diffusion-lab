@@ -1,15 +1,15 @@
 {
   "name": "heat_diffusion_backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "WebSocket bridge and native process manager for Heat Diffusion Lab.",
   "main": "server.js",
   "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "ai-cain",
+  "license": "MIT",
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.18.2",

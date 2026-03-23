@@ -40,7 +40,7 @@ Browser <--WebSocket(JSON)-- Node.js <--stdout-------- C++ Engine
 ```
 
 - The engine owns the simulation state
-- The backend is stateless and only forwards messages
+- The backend keeps the native process alive and only forwards messages
 - The frontend never computes physics, only renders
 
 ## Mathematical Model

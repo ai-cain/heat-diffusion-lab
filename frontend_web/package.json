@@ -2,7 +2,10 @@
   "name": "heat_diffusion_frontend",
   "private": true,
   "version": "0.0.0",
+  "description": "React frontend for Heat Diffusion Lab.",
   "type": "module",
+  "author": "ai-cain",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
