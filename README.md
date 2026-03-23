@@ -1,137 +1,175 @@
 # Heat Diffusion Lab
 
-Interactive 2D heat-diffusion simulator with a native C++ engine, a thin Node.js WebSocket bridge, and a lightweight React frontend.
+High-performance interactive 2D heat diffusion simulator powered by a native C++ engine, a lightweight Node.js bridge, and a modern React frontend.
 
-The C++ engine owns the numerical state. The backend only forwards commands and snapshots. The frontend focuses on controls and heatmap rendering.
+The system is designed with a clear separation of concerns:
+
+- C++ handles numerical computation
+- Node.js manages process orchestration and streaming
+- React provides real-time visualization and control
 
 ![Heat Diffusion Lab demo](docs/media/demo.gif)
 
 ## Features
 
-- 2D temperature grid simulation
-- fixed and insulated boundary conditions
-- configurable grid resolution
-- adjustable thermal diffusivity and timestep
-- multiple initial heat presets
-- live C++ state streaming to the browser
-- heatmap recording from the canvas
+- Real-time 2D heat diffusion simulation
+- Native C++ computation for high performance
+- Live state streaming via WebSockets
+- Interactive parameter tuning
+- Multiple initial condition presets
+- Support for different boundary conditions
+- Heatmap rendering in the browser
+- Canvas recording support
 
 ## Architecture
 
-```text
-frontend_web/  -> React + Vite UI and heatmap renderer
-backend_node/  -> WebSocket bridge and process manager
-engine_cpp/    -> native diffusion engine
-docs/          -> MkDocs project documentation
-```
-
-Runtime flow:
+The project follows a modular, multi-layer architecture:
 
 ```text
-browser --WebSocket JSON--> Node backend --stdin/stdout--> C++ engine
-browser <--WebSocket JSON-- Node backend <--stdout-------- C++ engine
+frontend_web/   -> React + Vite UI (controls + visualization)
+backend_node/   -> WebSocket bridge + engine process manager
+engine_cpp/     -> Native simulation engine (finite difference solver)
+docs/           -> MkDocs documentation
 ```
 
-## Simulation Model
+### Runtime Flow
 
-The engine advances a 2D temperature field using a finite-difference discretization of the heat equation:
+```text
+Browser --WebSocket(JSON)--> Node.js --stdin/stdout--> C++ Engine
+Browser <--WebSocket(JSON)-- Node.js <--stdout-------- C++ Engine
+```
+
+- The engine owns the simulation state
+- The backend is stateless and only forwards messages
+- The frontend never computes physics, only renders
+
+## Mathematical Model
+
+The simulator solves the 2D heat equation:
 
 ```math
-\frac{\partial u}{\partial t} = \alpha \nabla^2 u
+\frac{\partial u}{\partial t} = \alpha \left(
+\frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}
+\right)
 ```
 
-Current engine options:
+Using:
 
-- `boundaryMode`: `fixed` or `insulated`
-- `initialPattern`: `center_hotspot`, `left_wall`, `checkerboard`, `ring`
-- `diffusivity`
-- `timeStep`
-- `ambientTemperature`
-- `hotspotTemperature`
+- finite-difference discretization with a 5-point stencil
+- explicit time integration with Forward Euler
 
-## Folder Layout
+### Discrete Update
 
-```text
-heat-diffusion-lab/
-  backend_node/
-  docs/
-  engine_cpp/
-  frontend_web/
-  .gitignore
-  mkdocs.yml
-  README.md
-  requirements-docs.txt
+```math
+u_{i,j}^{n+1} = u_{i,j}^{n} + \alpha \Delta t \left(
+u_{i-1,j}^{n} + u_{i+1,j}^{n} + u_{i,j-1}^{n} + u_{i,j+1}^{n} - 4u_{i,j}^{n}
+\right)
 ```
 
-## Run Locally
+### Boundary Conditions
 
-### 1. Build the native engine
+- Fixed (Dirichlet): constant temperature at edges
+- Insulated (Neumann): zero heat flux
 
-```powershell
+### Initial Conditions
+
+- Center hotspot
+- Left wall
+- Checkerboard
+- Ring
+
+## Configuration Parameters
+
+The simulation can be configured in real time:
+
+```json
+{
+  "gridWidth": 48,
+  "gridHeight": 32,
+  "diffusivity": 0.18,
+  "timeStep": 0.12,
+  "boundaryMode": "fixed",
+  "initialPattern": "center_hotspot",
+  "ambientTemperature": 18,
+  "hotspotTemperature": 90,
+  "playing": false
+}
+```
+
+## Getting Started
+
+### 1. Build the C++ Engine
+
+```bash
 cmake -S engine_cpp -B engine_cpp/build
 cmake --build engine_cpp/build --config Release
 ```
 
-This produces `engine_cpp/build/Release/heat_diffusion_cli.exe` on Windows.
+### 2. Start the Backend
 
-### 2. Start the backend
-
-```powershell
+```bash
 cd backend_node
 pnpm install
 pnpm start
 ```
 
-The backend listens on port `3002` by default.
+Default port: `3002`
 
-### 3. Start the frontend
+### 3. Start the Frontend
 
-```powershell
+```bash
 cd frontend_web
 pnpm install
 pnpm dev
 ```
 
-By default, the frontend connects to `ws://localhost:3002`.
+The frontend connects to:
 
-## Browser Message API
-
-### Frontend to backend
-
-```json
-{
-  "type": "configure",
-  "data": {
-    "gridWidth": 48,
-    "gridHeight": 32,
-    "diffusivity": 0.18,
-    "timeStep": 0.12,
-    "boundaryMode": "fixed",
-    "initialPattern": "center_hotspot",
-    "ambientTemperature": 18,
-    "hotspotTemperature": 90,
-    "playing": false
-  }
-}
+```text
+ws://localhost:3002
 ```
 
-Other message types:
+## WebSocket API
 
-- `set_playing`
-- `reset`
-- `request_state`
+### Client -> Server
 
-### Backend to frontend
+- `configure`: update simulation parameters
+- `set_playing`: start or stop the simulation
+- `reset`: reset the current state
+- `request_state`: fetch a snapshot
 
-The engine returns a `state` payload with:
+### Server -> Client
 
-- current simulation time
-- current resolution and config
-- min/avg/max temperature
+State payload includes:
+
+- simulation time
+- grid resolution
+- temperature statistics (`min`, `avg`, `max`)
 - flattened temperature array
 
-## Notes
+## Design Principles
 
-- The frontend does not solve the PDE itself.
-- The backend keeps the engine process alive and forwards snapshots.
-- The engine also supports direct CLI output for one-shot inspection.
+- Separation of concerns: physics, transport, and UI are independent
+- Streaming-first architecture: real-time updates over WebSockets
+- Native performance: compute-intensive logic runs in C++
+- Extensibility: easy to add new patterns, solvers, or boundary modes
+
+## Future Improvements
+
+- GPU acceleration with WebGPU or CUDA
+- Implicit solvers for larger timesteps
+- Adaptive grid resolution
+- Export to video or datasets
+- 3D heat diffusion support
+
+## License
+
+MIT
+
+## Author
+
+**ai-cain**
+
+## Tagline
+
+> Real-time physics simulation powered by native performance and modern web technologies.
