@@ -1,7 +1,7 @@
 {
-  "name": "heat_diffusion_backend",
+  "name": "native-heat-diffusion-backend",
   "version": "1.0.0",
-  "description": "WebSocket bridge and native process manager for Heat Diffusion Lab.",
+  "description": "WebSocket bridge and native process manager for Native Heat Diffusion.",
   "main": "server.js",
   "type": "module",
   "scripts": {

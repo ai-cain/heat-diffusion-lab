@@ -1,4 +1,4 @@
-# Heat Diffusion Lab
+# Native Heat Diffusion
 
 High-performance interactive 2D heat diffusion simulator powered by a native C++ engine, a lightweight Node.js bridge, and a modern React frontend.
 
@@ -8,7 +8,7 @@ The system is designed with a clear separation of concerns:
 - Node.js manages process orchestration and streaming
 - React provides real-time visualization and control
 
-![Heat Diffusion Lab demo](docs/media/demo.gif)
+![Native Heat Diffusion demo](docs/media/demo.gif)
 
 ## Features
 

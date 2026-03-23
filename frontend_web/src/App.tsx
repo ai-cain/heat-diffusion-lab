@@ -136,7 +136,7 @@ function App() {
 
     const link = document.createElement('a');
     link.href = url;
-    link.download = `heat-diffusion-lab-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
+    link.download = `native-heat-diffusion-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`;
     link.click();
   };
 
@@ -434,8 +434,8 @@ function App() {
     <div className="app-shell">
       <header className="hero">
         <div className="hero-copy">
-          <span className="eyebrow">Heat Diffusion</span>
-          <h1>Heat Diffusion Lab</h1>
+          <span className="eyebrow">Native C++</span>
+          <h1>Native Heat Diffusion</h1>
           <p>
             Native C++ engine streaming a 2D temperature field to a lightweight web UI.
           </p>

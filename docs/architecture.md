@@ -1,6 +1,6 @@
 # Architecture
 
-`Heat Diffusion Lab` uses a simple three-layer architecture:
+`Native Heat Diffusion` uses a simple three-layer architecture:
 
 1. The frontend gathers simulation parameters and playback actions.
 2. The backend normalizes those messages and forwards them to the engine.

@@ -1,5 +1,5 @@
-site_name: Heat Diffusion Lab
-site_description: Native-engine heat diffusion simulator with a web UI
+site_name: Native Heat Diffusion
+site_description: Native C++ heat diffusion simulator with a web UI
 theme:
   name: material
 nav:

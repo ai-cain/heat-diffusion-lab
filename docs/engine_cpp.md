@@ -1,6 +1,6 @@
 # C++ Engine
 
-The native engine owns the real numerical state of `Heat Diffusion Lab`.
+The native engine owns the real numerical state of `Native Heat Diffusion`.
 
 ## Responsibilities
 

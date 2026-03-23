@@ -1,6 +1,6 @@
 # Development Guide
 
-This page describes the local workflow for `Heat Diffusion Lab`.
+This page describes the local workflow for `Native Heat Diffusion`.
 
 ## Prerequisites
 

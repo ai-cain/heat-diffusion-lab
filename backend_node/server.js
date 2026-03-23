@@ -163,7 +163,7 @@ const normalizeConfig = (raw) => {
 const server = app.listen(port);
 
 server.on('listening', () => {
-  console.log(`Heat Diffusion backend listening on port ${port}`);
+  console.log(`Native Heat Diffusion backend listening on port ${port}`);
   console.log(`C++ Engine Path: ${enginePath}`);
 });
 

@@ -1,8 +1,8 @@
 {
-  "name": "heat_diffusion_frontend",
+  "name": "native-heat-diffusion-frontend",
   "private": true,
   "version": "0.0.0",
-  "description": "React frontend for Heat Diffusion Lab.",
+  "description": "React frontend for Native Heat Diffusion.",
   "type": "module",
   "author": "ai-cain",
   "license": "MIT",

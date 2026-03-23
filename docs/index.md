@@ -1,4 +1,4 @@
-# Heat Diffusion Lab
+# Native Heat Diffusion
 
 Interactive heat-diffusion simulator powered by a native C++ engine.
 
